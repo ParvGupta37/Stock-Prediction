@@ -144,3 +144,119 @@ def _make_plots(prices, result, ticker):
     fig.savefig(PLOTS_DIR / "model_metrics_comparison.png", dpi=160)
     plt.close(fig)
 
+
+def run_forecast(ticker="AAPL", years=5):
+    prices = load_stock_data(ticker, years)
+    featured = create_features(prices)
+    usable = featured.dropna(subset=FEATURES + ["Target"]).reset_index(drop=True)
+    if len(usable) < 25:
+        raise RuntimeError("Not enough valid observations; at least 25 are needed.")
+
+    X = usable[FEATURES].to_numpy(dtype=float)
+    y = usable["Target"].to_numpy(dtype=float)
+    split = int(len(usable) * 0.8)
+    train_end = int(split * 0.9)
+    validation_start = int(train_end * 0.89)
+    if validation_start < 2 or validation_start >= train_end or train_end >= split:
+        raise RuntimeError("Could not create a chronological 80/20 train/test split.")
+
+    # Keep separate chronological sections for model fitting, alpha selection,
+    # interval calibration, and final testing. Test data is never used for tuning.
+    validation_scaler = StandardScaler().fit(X[:validation_start])
+    validation_train = validation_scaler.transform(X[:validation_start])
+    validation_features = validation_scaler.transform(X[validation_start:train_end])
+    alpha_scores = {}
+    for alpha in ALPHA_CANDIDATES:
+        validation_model = BayesianLinearRegression(
+            alpha=alpha, fit_intercept=True
+        ).fit(validation_train, y[:validation_start])
+        validation_prediction = validation_model.predict(validation_features)[0]
+        alpha_scores[alpha] = mean_absolute_error(
+            y[validation_start:train_end], validation_prediction
+        )
+    selected_alpha = min(alpha_scores, key=alpha_scores.get)
+
+    # Refit through the tuning period, leaving a later calibration period unseen.
+    scaler = StandardScaler().fit(X[:train_end])
+    X_train = scaler.transform(X[:train_end])
+    X_calibration = scaler.transform(X[train_end:split])
+    X_test = scaler.transform(X[split:])
+    test_model = BayesianLinearRegression(
+        alpha=selected_alpha, fit_intercept=True
+    ).fit(X_train, y[:train_end])
+    predicted, std, _, _ = test_model.predict_with_uncertainty(X_test)
+    # The ordinary linear regression baseline uses exactly the same training rows
+    # and standardized feature matrix, with a fitted intercept.
+    linear_model = LinearRegression().fit(X_train, y[:train_end])
+    linear_predicted = linear_model.predict(X_test)
+    actual = y[split:]
+
+    # Calibrate interval width from a held-out chronological calibration segment.
+    # This replaces the normal-theory 1.96 multiplier with an empirical quantile.
+    calibration_mean, calibration_std, _, _ = test_model.predict_with_uncertainty(
+        X_calibration
+    )
+    calibration_scores = np.abs(y[train_end:split] - calibration_mean) / np.maximum(
+        calibration_std, 1e-12
+    )
+    quantile_rank = min(
+        int(np.ceil(0.95 * (len(calibration_scores) + 1))), len(calibration_scores)
+    )
+    interval_multiplier = float(np.sort(calibration_scores)[quantile_rank - 1])
+    lower = predicted - interval_multiplier * std
+    upper = predicted + interval_multiplier * std
+    mae = mean_absolute_error(actual, predicted)
+    rmse = np.sqrt(mean_squared_error(actual, predicted))
+    r2 = r2_score(actual, predicted) if len(actual) > 1 else float("nan")
+    coverage = np.mean((actual >= lower) & (actual <= upper))
+    linear_mae = mean_absolute_error(actual, linear_predicted)
+    linear_rmse = np.sqrt(mean_squared_error(actual, linear_predicted))
+    linear_r2 = r2_score(actual, linear_predicted) if len(actual) > 1 else float("nan")
+
+    prediction_frame = pd.DataFrame({
+        "Date": usable["Date"].iloc[split:].dt.strftime("%Y-%m-%d").to_numpy(),
+        "Actual_Price": actual,
+        "Predicted_Price": predicted,
+        "Linear_Regression_Predicted_Price": linear_predicted,
+        "Prediction_Std": std,
+        "Lower_95": lower,
+        "Upper_95": upper,
+    })
+    PREDICTIONS_PATH.parent.mkdir(parents=True, exist_ok=True)
+    prediction_frame.to_csv(PREDICTIONS_PATH, index=False)
+
+    # Refit on all labeled history, then forecast one trading day after latest data.
+    full_scaler = StandardScaler().fit(X)
+    final_model = BayesianLinearRegression(
+        alpha=selected_alpha, fit_intercept=True
+    ).fit(full_scaler.transform(X), y)
+    final_linear_model = LinearRegression().fit(full_scaler.transform(X), y)
+    latest_features = featured.dropna(subset=FEATURES).iloc[[-1]][FEATURES].to_numpy(dtype=float)
+    latest_features = full_scaler.transform(latest_features)
+    next_price, next_std, _, _ = final_model.predict_with_uncertainty(latest_features)
+    next_lower = next_price - interval_multiplier * next_std
+    next_upper = next_price + interval_multiplier * next_std
+    next_linear_price = final_linear_model.predict(
+        full_scaler.transform(featured.dropna(subset=FEATURES).iloc[[-1]][FEATURES].to_numpy(dtype=float))
+    )
+    result = {
+        "ticker": ticker.strip().upper(), "years": int(years),
+        "training_samples": train_end, "calibration_samples": split - train_end,
+        "testing_samples": len(actual),
+        "mae": mae, "rmse": rmse, "r2": r2, "coverage": coverage,
+        "selected_alpha": selected_alpha,
+        "validation_alpha_mae": alpha_scores[selected_alpha],
+        "interval_multiplier": interval_multiplier,
+        "linear_mae": linear_mae, "linear_rmse": linear_rmse,
+        "linear_r2": linear_r2, "linear_next_price": float(next_linear_price[0]),
+        "latest_close": float(prices["Close"].iloc[-1]),
+        "next_price": float(next_price[0]), "next_std": float(next_std[0]),
+        "next_lower": float(next_lower[0]), "next_upper": float(next_upper[0]),
+        "test_dates": usable["Date"].iloc[split:].to_numpy(), "actual": actual,
+        "predicted": predicted, "lower": lower, "upper": upper,
+        "linear_predicted": linear_predicted,
+        "predictions": prediction_frame, "prices": prices,
+    }
+    _make_plots(prices, result, result["ticker"])
+    return result
+
