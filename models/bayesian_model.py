@@ -51,3 +51,24 @@ class BayesianLinearRegression:
         self.posterior_mean = self.beta * self.posterior_covariance @ X.T @ y
         return self
 
+    def predict_with_uncertainty(self, X):
+        X = self._design_matrix(X)
+        
+        # Predictive mean is X_new m_N. Predictive variance includes both
+        # observation noise (beta^-1) and uncertainty in the weights.
+        
+        mean = X @ self.posterior_mean
+        variance = (1.0 / self.beta) + np.sum(
+            (X @ self.posterior_covariance) * X, axis=1
+        )
+        standard_deviation = np.sqrt(np.maximum(variance, 0.0))
+        
+        # A Gaussian 95% prediction interval is mean +/- 1.96 standard deviations.
+        
+        lower_95 = mean - 1.96 * standard_deviation
+        upper_95 = mean + 1.96 * standard_deviation
+        return mean, standard_deviation, lower_95, upper_95
+
+    def predict(self, X):
+        """Return the predictive mean, standard deviation, and 95% bounds."""
+        return self.predict_with_uncertainty(X)
