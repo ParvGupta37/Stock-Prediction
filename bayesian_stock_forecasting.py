@@ -73,3 +73,15 @@ def _prepare_prices(data):
     data["Close"] = pd.to_numeric(data["Close"], errors="coerce")
     return data.dropna(subset=["Close"])
 
+
+def create_features(prices):
+    """Build five simple features and the following day's closing-price target."""
+    frame = prices[["Date", "Close"]].copy()
+    frame["Previous_Close"] = frame["Close"]
+    frame["MA_5"] = frame["Close"].rolling(5).mean()
+    frame["MA_10"] = frame["Close"].rolling(10).mean()
+    frame["MA_20"] = frame["Close"].rolling(20).mean()
+    frame["Daily_Return"] = frame["Close"].pct_change()
+    frame["Target"] = frame["Close"].shift(-1)
+    return frame
+
