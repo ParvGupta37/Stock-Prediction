@@ -85,3 +85,62 @@ def create_features(prices):
     frame["Target"] = frame["Close"].shift(-1)
     return frame
 
+
+def _make_plots(prices, result, ticker):
+    PLOTS_DIR.mkdir(parents=True, exist_ok=True)
+    dates = result["test_dates"]
+    actual = result["actual"]
+    predicted = result["predicted"]
+    linear_predicted = result["linear_predicted"]
+
+    fig, ax = plt.subplots(figsize=(10, 5))
+    ax.plot(dates, actual, label="Actual", linewidth=1.6)
+    ax.plot(dates, predicted, label="Bayesian Linear Regression", linewidth=1.6)
+    ax.plot(dates, linear_predicted, label="Basic Linear Regression", linewidth=1.4, alpha=0.85)
+    ax.set(title=f"Model Prediction Comparison: {ticker}", xlabel="Date", ylabel="Price")
+    ax.legend()
+    ax.grid(alpha=0.25)
+    fig.tight_layout()
+    fig.savefig(PLOTS_DIR / "actual_vs_predicted.png", dpi=160)
+    fig.savefig(PLOTS_DIR / "tuned_model_comparison.png", dpi=160)
+    plt.close(fig)
+
+    fig, ax = plt.subplots(figsize=(10, 5))
+    ax.plot(dates, actual, label="Actual", color="black", linewidth=1.3)
+    ax.plot(dates, predicted, label="Predicted mean", color="tab:blue", linewidth=1.5)
+    ax.fill_between(dates, result["lower"], result["upper"], color="tab:blue", alpha=0.2, label="95% prediction interval")
+    ax.set(title=f"Predictions with 95% Uncertainty Interval: {ticker}", xlabel="Date", ylabel="Price")
+    ax.legend()
+    ax.grid(alpha=0.25)
+    fig.tight_layout()
+    fig.savefig(PLOTS_DIR / "prediction_uncertainty.png", dpi=160)
+    plt.close(fig)
+
+    fig, ax = plt.subplots(figsize=(10, 5))
+    ax.plot(prices["Date"], prices["Close"], color="tab:blue", linewidth=1.2)
+    ax.set(title=f"Stock Price History: {ticker}", xlabel="Date", ylabel="Closing price")
+    ax.grid(alpha=0.25)
+    fig.tight_layout()
+    fig.savefig(PLOTS_DIR / "stock_history.png", dpi=160)
+    plt.close(fig)
+
+    # Separate metric panels keep error metrics and R² on readable scales.
+    metric_names = ["MAE", "RMSE", "R²"]
+    bayesian_metrics = [result["mae"], result["rmse"], result["r2"]]
+    linear_metrics = [result["linear_mae"], result["linear_rmse"], result["linear_r2"]]
+    fig, axes = plt.subplots(1, 3, figsize=(10, 4))
+    positions = np.arange(2)
+    for ax, name, bayes_value, linear_value in zip(
+        axes, metric_names, bayesian_metrics, linear_metrics
+    ):
+        ax.bar(positions, [bayes_value, linear_value], color=["tab:blue", "tab:orange"])
+        ax.set_xticks(positions, ["Bayesian", "Basic Linear"])
+        ax.set_title(name)
+        ax.grid(axis="y", alpha=0.25)
+        for position, value in zip(positions, [bayes_value, linear_value]):
+            ax.text(position, value, f"{value:.2f}", ha="center", va="bottom", fontsize=9)
+    fig.suptitle(f"Test-set Model Metrics: {ticker}")
+    fig.tight_layout()
+    fig.savefig(PLOTS_DIR / "model_metrics_comparison.png", dpi=160)
+    plt.close(fig)
+
