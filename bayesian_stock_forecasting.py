@@ -260,3 +260,33 @@ def run_forecast(ticker="AAPL", years=5):
     _make_plots(prices, result, result["ticker"])
     return result
 
+
+def main():
+    result = run_forecast()
+    print("=" * 50)
+    print("BAYESIAN STOCK FORECASTING RESULTS")
+    print("=" * 50)
+    print(f"Stock: {result['ticker']}")
+    print(f"Training Samples: {result['training_samples']}")
+    print(f"Testing Samples: {result['testing_samples']}")
+    print(f"Calibration Samples: {result['calibration_samples']}")
+    print(f"MAE: {result['mae']:.2f}")
+    print(f"RMSE: {result['rmse']:.2f}")
+    print(f"R² Score: {result['r2']:.2f}")
+    print(f"95% Interval Coverage: {result['coverage']:.2%}")
+    print(f"Selected Prior Strength (alpha): {result['selected_alpha']:g}")
+    print(f"Validation MAE for selected alpha: {result['validation_alpha_mae']:.2f}")
+    print(f"Calibrated interval multiplier: {result['interval_multiplier']:.2f}")
+    print("\nMODEL COMPARISON (chronological test set)")
+    print(f"Bayesian Linear Regression - MAE: {result['mae']:.2f}, RMSE: {result['rmse']:.2f}, R²: {result['r2']:.2f}")
+    print(f"Basic Linear Regression   - MAE: {result['linear_mae']:.2f}, RMSE: {result['linear_rmse']:.2f}, R²: {result['linear_r2']:.2f}")
+    print(f"Next Day Predicted Price: ${result['next_price']:.2f}")
+    print(f"Basic Linear Regression Next Day Estimate: ${result['linear_next_price']:.2f}")
+    print(f"95% Prediction Interval: ${result['next_lower']:.2f} - ${result['next_upper']:.2f}")
+    print("=" * 50)
+    print(f"Saved predictions to {PREDICTIONS_PATH}")
+    print(f"Saved plots to {PLOTS_DIR}")
+
+
+if __name__ == "__main__":
+    main()
