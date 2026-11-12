@@ -64,3 +64,52 @@ For a new standardized feature row `x`, the predictive mean is `x m_N`. The pred
 - **R²:** proportion of test-set variation explained relative to predicting the test mean.
 - **95% interval coverage:** fraction of actual test prices inside their corresponding 95% intervals.
 
+## Project Structure
+
+```text
+Bayesian-Stock-Forecasting/
+├── data/stock_data.csv
+├── models/bayesian_model.py
+├── outputs/predictions.csv
+├── outputs/plots/
+├── app.py
+├── bayesian_stock_forecasting.py
+├── requirements.txt
+└── README.md
+```
+
+## Installation
+
+Use Python 3.9 or newer, then install the listed packages:
+
+```bash
+python -m pip install -r requirements.txt
+```
+
+## How to Run
+
+Run the command-line forecasting script:
+
+```bash
+python bayesian_stock_forecasting.py
+```
+
+To change the default ticker or history length when using the script, call `run_forecast("MSFT", 5)` from Python. To use the simple interface:
+
+```bash
+streamlit run app.py
+```
+
+Enter a ticker and history length in the sidebar, then click **Run Forecast**.
+
+## Expected Output
+
+The script prints test metrics for both models, Bayesian interval coverage, the selected `alpha`, and both next-day estimates. Alpha selection and interval calibration use separate earlier chronological segments; the final test period is reserved for comparison. It writes `outputs/predictions.csv`, including `Linear_Regression_Predicted_Price` alongside Bayesian results. Plots are saved in `outputs/plots/`: `actual_vs_predicted.png` and `tuned_model_comparison.png` compare actual prices with both models, `model_metrics_comparison.png` compares MAE, RMSE, and R², while `prediction_uncertainty.png` and `stock_history.png` show the Bayesian interval and price history.
+
+## Limitations
+
+Stock movements can be affected by news, market conditions, and many other factors not represented by these five price-based features. A linear model cannot capture every pattern, and historical test results do not guarantee future performance. The interval depends on the model and Gaussian noise assumptions.
+
+## Future Scope
+
+Possible extensions include comparing against a simple baseline, testing more tickers and time periods, and studying additional features. Any extension should preserve chronological evaluation and clearly report its limitations.
