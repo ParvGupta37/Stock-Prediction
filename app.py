@@ -64,3 +64,12 @@ if run_button:
         except Exception as error:
             st.error(f"Forecast failed: {error}")
 
+st.subheader("How Bayesian Regression Works")
+st.write(
+    "Traditional linear regression gives a single prediction. Bayesian linear "
+    "regression treats model parameters as probability distributions and combines "
+    "prior knowledge with observed data. This lets the model report both a predicted "
+    "price and an uncertainty range around that prediction. The 95% interval is the "
+    "model's estimate of a range that would contain future prices about 95% of the time "
+    "under its assumptions."
+)
